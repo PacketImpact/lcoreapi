@@ -199,6 +199,21 @@ class API:
         data = self._query(requests.post, url, data=data)
         return Resource(self, data)
 
+    def put(self, url, data, **kwargs):
+        url = self.build_url(url, **kwargs)
+        data = self._query(requests.put, url, data=data)
+        return Resource(self, data)
+
+    def patch(self, url, data, **kwargs):
+        url = self.build_url(url, **kwargs)
+        data = self._query(requests.patch, url, data=data)
+        return Resource(self, data)
+
+    def delete(self, url, data, **kwargs):
+        url = self.build_url(url, **kwargs)
+        data = self._query(requests.delete, url, data=data)
+        return Resource(self, data)
+
     def __str__(self):
         return "{self.public_key} on {self.base_url}".format(self=self)
 
