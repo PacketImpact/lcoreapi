@@ -59,6 +59,18 @@ class APIAuthError(APIError):
     pass
 
 
+class APINotFoundError(APIError):
+    pass
+
+
+class APIMethodNotAllowedError(APIError):
+    pass
+
+
+class APIBadRequestError(APIError):
+    pass
+
+
 class Resource(dict):
     def __init__(self, api, data):
         self.api = api
@@ -136,24 +148,18 @@ class API:
     def public_key(self):
         return self.auth[0]
 
-    def _raise_for_error(self, data):
-        error_type = data.get('error')
+    def _query(self, method, url, data=None):
+        r_kwargs = {}
+        r_kwargs['auth'] = self.auth
 
-        if not error_type:
-            return
+        # POST data= args as JSON instead of form data.
+        # the API should accept both, but JSON is better for nested stuff.
+        if data is not None:
+            r_kwargs['data'] = dumps(data)
+            r_kwargs['headers'] = {'Content-Type': 'application/json'}
 
-        if error_type == 'auth_error':
-            raise APIAuthError(data.get('message', "Unknown auth error."))
-        if error_type == 'server_error':
-            raise APIServerError(data.get('message', "Unknown server error."))
-        else:
-            raise APIError("Unknown error: {} ({})"
-                           .format(error_type, data.get('message')))
-
-    def _query(self, method, url, *args, **kwargs):
-        kwargs['auth'] = self.auth
         try:
-            req = method(url, *args, **kwargs)
+            req = method(url, **r_kwargs)
             data = Resource(self, req.json())
         except ValueError as e:
             try:
@@ -164,9 +170,26 @@ class API:
         except requests.exceptions.ConnectionError as e:
             raise APIError("Error connecting to %r" % self) from e
 
-        self._raise_for_error(data)
+        if req.status_code == 200 or req.status_code == 201:
+            return data
 
-        return data
+        if req.status_code == 400:
+            raise APIBadRequestError(data.get('message', "Bad request"))
+        if req.status_code == 401:
+            raise APIAuthError(data.get('message', "Unauthorized"))
+        if req.status_code == 403:
+            raise APIAuthError(data.get('message', "Forbidden"))
+        if req.status_code == 404:
+            raise APINotFoundError(data.get('message', "Not found"))
+        if req.status_code == 405:
+            raise APIMethodNotAllowedError(data.get('message', "Method not allowed"))
+        if req.status_code >= 500 and req.status_code <= 599:
+            raise APIServerError(data.get('message', "Unknown server error"))
+
+        err_type = data.get('error')
+        err_msg = data.get('message')
+        raise APIError("Unknown error {}: {} ({})"
+                       .format(req.status_code, err_type, err_msg))
 
     def build_url(self, url, **kwargs):
         if url.startswith('/'):
@@ -196,23 +219,19 @@ class API:
 
     def post(self, url, data, **kwargs):
         url = self.build_url(url, **kwargs)
-        data = self._query(requests.post, url, data=data)
-        return Resource(self, data)
+        return self._query(requests.post, url, data=data)
 
     def put(self, url, data, **kwargs):
         url = self.build_url(url, **kwargs)
-        data = self._query(requests.put, url, data=data)
-        return Resource(self, data)
+        return self._query(requests.put, url, data=data)
 
     def patch(self, url, data, **kwargs):
         url = self.build_url(url, **kwargs)
-        data = self._query(requests.patch, url, data=data)
-        return Resource(self, data)
+        return self._query(requests.patch, url, data=data)
 
-    def delete(self, url, data, **kwargs):
+    def delete(self, url, **kwargs):
         url = self.build_url(url, **kwargs)
-        data = self._query(requests.delete, url, data=data)
-        return Resource(self, data)
+        return self._query(requests.delete, url)
 
     def __str__(self):
         return "{self.public_key} on {self.base_url}".format(self=self)
