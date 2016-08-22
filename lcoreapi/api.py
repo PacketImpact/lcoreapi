@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
 import json
 import requests
+from requests import exceptions as rexc
 from urllib.parse import quote as _quote
 
-__all__ = ['API', 'APIError', 'APIServerError', 'APIAuthError', 'BASE_URL', 'Resource']
+__all__ = ['API', 'APIError', 'APIServerError', 'APIAuthError',
+           'APINotFoundError', 'APIMethodNotAllowedError',
+           'APIBadRequestError', 'BASE_URL', 'Resource']
 
 BASE_URL = 'https://core.lambdavpn.net/v1/'
 
@@ -135,18 +138,21 @@ class Resource(dict):
 
 
 class API:
-    def __init__(self, key_id, secret, base_url=BASE_URL):
+    def __init__(self, key_id, secret, base_url=BASE_URL, timeout=10):
         self.auth = (key_id, secret)
         self.base_url = base_url
+        self.timeout = timeout
 
         self._cache = dict()
         self._cache_ttl = timedelta(minutes=5)
 
-        self.info = self.get('/meow')
-
     @property
     def public_key(self):
         return self.auth[0]
+
+    @property
+    def info(self):
+        return self.get('/meow')
 
     def _query(self, method, url, data=None):
         r_kwargs = {}
@@ -158,6 +164,8 @@ class API:
             r_kwargs['data'] = dumps(data)
             r_kwargs['headers'] = {'Content-Type': 'application/json'}
 
+        r_kwargs['timeout'] = self.timeout
+
         try:
             req = method(url, **r_kwargs)
             data = Resource(self, req.json())
@@ -167,7 +175,7 @@ class API:
             except:
                 pass
             raise APIError("Invalid response content from %r on %r" % (self, url)) from e
-        except requests.exceptions.ConnectionError as e:
+        except rexc.RequestException as e:
             raise APIError("Error connecting to %r" % self) from e
 
         if req.status_code == 200 or req.status_code == 201:
