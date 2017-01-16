@@ -12,13 +12,29 @@ BASE_URL = 'https://core.lambdavpn.net/v1/'
 
 
 def parse_date(s):
+    """ Parse API returned datetimes, handling multiple formats and
+    compatibility. It's ISO 8601, with or without microseconds.
+    It used to have no TZ, now has UTC "Z".
+    """
     if not s:
         return None
-    try:
-        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f")
-    except ValueError:
-        raise
-        return s
+
+    s = s.replace('+00:00', 'Z')
+
+    formats = [
+        "%Y-%m-%dT%H:%M:%S.%fZ",  # UTC, with microseconds
+        "%Y-%m-%dT%H:%M:%SZ",  # UTC
+        "%Y-%m-%dT%H:%M:%S.%f",  # with microseconds
+        "%Y-%m-%dT%H:%M:%S",
+    ]
+
+    for f in formats:
+        try:
+            return datetime.strptime(s, f)
+        except ValueError:
+            pass
+
+    raise ValueError("Unknown date format: %r" % s)
 
 
 def dumps(data, **kwargs):
