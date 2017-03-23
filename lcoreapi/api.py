@@ -53,7 +53,7 @@ def quote(v):
     if isinstance(v, (str, bytes)):
         return _quote(v)
     if isinstance(v, datetime):
-        return str(v.utctimestamp())
+        return str(v.isoformat())
 
 
 def append_qs(url, **filters):
