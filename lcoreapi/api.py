@@ -90,6 +90,37 @@ class APIBadRequestError(APIError):
     pass
 
 
+class ListIter:
+    """ Just a lazy iterator with the correct __len__ """
+    def __init__(self, obj):
+        self.obj = obj
+
+        def it():
+            o = self.obj
+            while o and o['items']:
+                for item in o['items']:
+                    yield item
+
+                o = o.get('next')
+
+        self.it = it()
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self.obj['total_count']
+
+    def __next__(self):
+        return next(self.it)
+
+    def __repr__(self):
+        return repr(self.obj)
+
+    def __str__(self):
+        return str(self.obj)
+
+
 class Resource(dict):
     def __init__(self, api, data):
         self.api = api
@@ -135,12 +166,7 @@ class Resource(dict):
         """ Iterator for "list" objects """
         assert self.get('object') == 'list'
 
-        o = self
-        while o and o['items']:
-            for item in o['items']:
-                yield item
-
-            o = self.get('next')
+        return ListIter(self)
 
     def __str__(self):
         cn = self.__class__.__name__
